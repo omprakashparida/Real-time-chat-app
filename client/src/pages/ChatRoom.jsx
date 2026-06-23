@@ -8,12 +8,11 @@ function ChatRoom() {
   const [messages, setMessages] = useState([]);
   const [message, setMessage] = useState("");
   const [onlineUsers, setOnlineUsers] = useState([]);
-  
-  // New state to track who is typing
-  const [typingUsers, setTypingUsers] = useState([]);
-  const typingTimeoutRef = useRef(null);
-  
+  const [typingUser, setTypingUser] =
+  useState("");
+  // Reference to auto-scroll to the bottom of the chat
   const messagesEndRef = useRef(null);
+
   const user = JSON.parse(localStorage.getItem("user"));
 
   const scrollToBottom = () => {
@@ -22,7 +21,7 @@ function ChatRoom() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, typingUsers]); // Also scroll when the typing indicator appears
+  }, [messages]);
 
   useEffect(() => {
     socket.emit("joinRoom", {
@@ -44,46 +43,12 @@ function ChatRoom() {
       setOnlineUsers(users);
     });
 
-    // --- NEW: Typing Event Listeners ---
-    socket.on("typing", (data) => {
-      if (data.username !== user.username) {
-        setTypingUsers((prev) => {
-          if (!prev.includes(data.username)) return [...prev, data.username];
-          return prev;
-        });
-      }
-    });
-
-    socket.on("stopTyping", (data) => {
-      setTypingUsers((prev) => prev.filter((name) => name !== data.username));
-    });
-
     return () => {
       socket.off("messageHistory");
       socket.off("newMessage");
       socket.off("onlineUsers");
-      socket.off("typing");
-      socket.off("stopTyping");
     };
   }, [roomId, user.username]);
-
-  // --- NEW: Handle input changes and emit typing events ---
-  const handleTyping = (e) => {
-    setMessage(e.target.value);
-
-    // Tell the server we are typing
-    socket.emit("typing", { roomId, username: user.username });
-
-    // Clear the previous timeout
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
-    // Stop typing automatically after 1.5 seconds of inactivity
-    typingTimeoutRef.current = setTimeout(() => {
-      socket.emit("stopTyping", { roomId, username: user.username });
-    }, 1500);
-  };
 
   const sendMessage = () => {
     if (!message.trim()) return;
@@ -95,10 +60,6 @@ function ChatRoom() {
     });
 
     setMessage("");
-    
-    // Immediately clear typing state when message is sent
-    socket.emit("stopTyping", { roomId, username: user.username });
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
   };
 
   return (
@@ -158,6 +119,7 @@ function ChatRoom() {
         {/* Messages Container */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
           {messages.map((msg, index) => {
+            // Check if the message is from the current user
             const isMe = msg.sender?._id === user.id || msg.sender?.username === user.username;
 
             return (
@@ -182,23 +144,7 @@ function ChatRoom() {
               </div>
             );
           })}
-
-          {/* --- NEW: Typing Indicator UI --- */}
-          {typingUsers.length > 0 && (
-            <div className="flex items-end gap-2">
-              <div className="bg-white border border-gray-200 px-4 py-3 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-1.5 w-fit">
-                <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-              </div>
-              <span className="text-xs text-gray-500 font-medium mb-1 ml-1">
-                {typingUsers.length === 1 
-                  ? `${typingUsers[0]} is typing...` 
-                  : `${typingUsers.join(', ')} are typing...`}
-              </span>
-            </div>
-          )}
-
+          {/* Invisible element to auto-scroll to */}
           <div ref={messagesEndRef} />
         </div>
 
@@ -210,7 +156,7 @@ function ChatRoom() {
                 rows="1"
                 placeholder="Type a message..."
                 value={message}
-                onChange={handleTyping}
+                onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();

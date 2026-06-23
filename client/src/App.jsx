@@ -9,6 +9,8 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import ChatRoom from "./pages/ChatRoom";
+// import { Navigate } from "react-router-dom";
+
 
 function App() {
   return (
